@@ -1,19 +1,32 @@
 package sse
 
 import (
+	"sort"
 	"strconv"
 	"strings"
 )
+
+type CitationSource struct {
+	Index       int     `json:"index"`
+	URL         string  `json:"url"`
+	Title       string  `json:"title,omitempty"`
+	Snippet     string  `json:"snippet,omitempty"`
+	SiteName    string  `json:"site_name,omitempty"`
+	SiteIcon    string  `json:"site_icon,omitempty"`
+	PublishedAt float64 `json:"published_at,omitempty"`
+}
 
 type citationLinkCollector struct {
 	ordered     []string
 	explicitRaw map[int]string
 	hasZeroIdx  bool
+	sources     map[int]CitationSource
 }
 
 func newCitationLinkCollector() *citationLinkCollector {
 	return &citationLinkCollector{
 		explicitRaw: map[int]string{},
+		sources:     map[int]CitationSource{},
 	}
 }
 
@@ -36,6 +49,56 @@ func (c *citationLinkCollector) build() map[int]string {
 		}
 	}
 	return out
+}
+
+func (c *citationLinkCollector) buildSources() []CitationSource {
+	// Merge explicit sources with ordered fallbacks
+	merged := make(map[int]CitationSource, len(c.sources)+len(c.ordered))
+
+	// First, add explicit sources
+	for idx, src := range c.sources {
+		if idx <= 0 || strings.TrimSpace(src.URL) == "" {
+			continue
+		}
+		merged[idx] = src
+	}
+
+	// Handle zero-based index shift if needed
+	if c.hasZeroIdx {
+		for rawIdx, src := range c.sources {
+			if rawIdx < 0 || strings.TrimSpace(src.URL) == "" {
+				continue
+			}
+			normalized := rawIdx + 1
+			existing, exists := merged[normalized]
+			if !exists {
+				merged[normalized] = src
+				continue
+			}
+			if c.preferURLForIndex(normalized, existing.URL, src.URL) == src.URL {
+				merged[normalized] = src
+			}
+		}
+	}
+
+	// Add ordered fallbacks for indices not covered by explicit sources
+	for i, url := range c.ordered {
+		idx := i + 1
+		if _, exists := merged[idx]; !exists && isWebURL(url) {
+			merged[idx] = CitationSource{Index: idx, URL: url}
+		}
+	}
+
+	// Convert to sorted slice
+	result := make([]CitationSource, 0, len(merged))
+	for _, src := range merged {
+		result = append(result, src)
+	}
+	sort.Slice(result, func(i, j int) bool {
+		return result[i].Index < result[j].Index
+	})
+
+	return result
 }
 
 func (c *citationLinkCollector) buildNormalizedExplicit() map[int]string {
@@ -124,6 +187,25 @@ func (c *citationLinkCollector) captureURLAndIndex(m map[string]any) {
 		return
 	}
 	c.explicitRaw[idx] = url
+
+	// Capture full source metadata
+	src := CitationSource{
+		Index:       idx,
+		URL:         url,
+		Title:       asString(m["title"]),
+		Snippet:     asString(m["snippet"]),
+		SiteName:    asString(m["site_name"]),
+		SiteIcon:    asString(m["site_icon"]),
+		PublishedAt: 0,
+	}
+	if pubAt, ok := m["published_at"].(float64); ok {
+		src.PublishedAt = pubAt
+	}
+
+	// Only store if we don't already have a non-empty source for this index
+	if existing, ok := c.sources[idx]; !ok || strings.TrimSpace(existing.URL) == "" {
+		c.sources[idx] = src
+	}
 }
 
 func (c *citationLinkCollector) addOrdered(url string) {

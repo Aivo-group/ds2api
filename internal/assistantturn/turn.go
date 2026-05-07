@@ -44,6 +44,7 @@ type Turn struct {
 	ToolCalls         []toolcall.ParsedToolCall
 	ParsedToolCalls   toolcall.ToolCallParseResult
 	CitationLinks     map[int]string
+	Sources           []sse.CitationSource
 	ContentFilter     bool
 	ResponseMessageID int
 	StopReason        StopReason
@@ -84,6 +85,7 @@ type StreamSnapshot struct {
 	DetectionThinking     string
 	ContentFilter         bool
 	CitationLinks         map[int]string
+	Sources               []sse.CitationSource
 	ResponseMessageID     int
 	AlreadyEmittedCalls   bool
 	AdditionalToolCalls   []toolcall.ParsedToolCall
@@ -120,6 +122,7 @@ func BuildTurnFromCollected(result sse.CollectResult, opts BuildOptions) Turn {
 		ToolCalls:         calls,
 		ParsedToolCalls:   parsed,
 		CitationLinks:     result.CitationLinks,
+		Sources:           result.Sources,
 		ContentFilter:     result.ContentFilter,
 		ResponseMessageID: result.ResponseMessageID,
 		StopReason:        stopReason,
@@ -166,6 +169,7 @@ func BuildTurnFromStreamSnapshot(snapshot StreamSnapshot, opts BuildOptions) Tur
 		ToolCalls:         calls,
 		ParsedToolCalls:   parsed,
 		CitationLinks:     snapshot.CitationLinks,
+		Sources:           snapshot.Sources,
 		ContentFilter:     snapshot.ContentFilter,
 		ResponseMessageID: snapshot.ResponseMessageID,
 		StopReason:        stopReason,

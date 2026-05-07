@@ -16,6 +16,7 @@ type CollectResult struct {
 	ToolDetectionThinking string
 	ContentFilter         bool
 	CitationLinks         map[int]string
+	Sources               []CitationSource
 	ResponseMessageID     int
 }
 
@@ -88,6 +89,7 @@ func CollectStream(resp *http.Response, thinkingEnabled bool, closeBody bool) Co
 		ToolDetectionThinking: toolDetectionThinking.String(),
 		ContentFilter:         contentFilter,
 		CitationLinks:         collector.build(),
+		Sources:               collector.buildSources(),
 		ResponseMessageID:     responseMessageID,
 	}
 }
