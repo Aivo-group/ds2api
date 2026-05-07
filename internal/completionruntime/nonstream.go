@@ -122,6 +122,7 @@ func ExecuteNonStreamWithRetry(ctx context.Context, ds DeepSeekCaller, a *auth.R
 			ToolDetectionThinking: turn.DetectionThinking,
 			ContentFilter:         turn.ContentFilter,
 			CitationLinks:         turn.CitationLinks,
+			Sources:               turn.Sources,
 			ResponseMessageID:     turn.ResponseMessageID,
 		}, buildOptions(stdReq, usagePrompt, opts))
 
