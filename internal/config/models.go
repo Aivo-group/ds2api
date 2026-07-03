@@ -1,6 +1,9 @@
 package config
 
-import "strings"
+import (
+	"strings"
+	"time"
+)
 
 type ModelInfo struct {
 	ID         string `json:"id"`
@@ -8,6 +11,16 @@ type ModelInfo struct {
 	Created    int64  `json:"created"`
 	OwnedBy    string `json:"owned_by"`
 	Permission []any  `json:"permission,omitempty"`
+}
+type OllamaModelInfo struct {
+	Name       string `json:"name"`
+	Model      string `json:"model"`
+	Size       int64  `json:"size"`
+	ModifiedAt string `json:"modified_at"`
+}
+type OllamaCapabilitiesModelInfo struct {
+	ID           string   `json:"id"`
+	Capabilities []string `json:"capabilities"`
 }
 
 type ModelAliasReader interface {
@@ -24,8 +37,21 @@ var deepSeekBaseModels = []ModelInfo{
 	{ID: "deepseek-v4-vision", Object: "model", Created: 1677610602, OwnedBy: "deepseek", Permission: []any{}},
 }
 
-var DeepSeekModels = appendNoThinkingVariants(deepSeekBaseModels)
+var OllamaCapabilitiesModels = []OllamaCapabilitiesModelInfo{
+	{ID: "deepseek-v4-flash", Capabilities: []string{"tools", "thinking"}},
+	{ID: "deepseek-v4-pro", Capabilities: []string{"tools", "thinking"}},
+	{ID: "deepseek-v4-flash-search", Capabilities: []string{"tools", "thinking"}},
+	{ID: "deepseek-v4-pro-search", Capabilities: []string{"tools", "thinking"}},
+	{ID: "deepseek-v4-vision", Capabilities: []string{"tools", "thinking", "vision"}},
+	{ID: "deepseek-v4-flash-nothinking", Capabilities: []string{"tools"}},
+	{ID: "deepseek-v4-pro-nothinking", Capabilities: []string{"tools"}},
+	{ID: "deepseek-v4-flash-search-nothinking", Capabilities: []string{"tools"}},
+	{ID: "deepseek-v4-pro-search-nothinking", Capabilities: []string{"tools"}},
+	{ID: "deepseek-v4-vision-nothinking", Capabilities: []string{"tools", "vision"}},
+}
 
+var DeepSeekModels = appendNoThinkingVariants(deepSeekBaseModels)
+var OllamaModels = mapToOllamaModels(DeepSeekModels)
 var claudeBaseModels = []ModelInfo{
 	// Current aliases
 	{ID: "claude-opus-4-6", Object: "model", Created: 1715635200, OwnedBy: "anthropic"},
@@ -247,6 +273,23 @@ func OpenAIModelByID(store ModelAliasReader, id string) (ModelInfo, bool) {
 	return ModelInfo{}, false
 }
 
+func OllamaModelsResponse() map[string]any {
+	return map[string]any{"models": OllamaModels}
+}
+
+func OllamaModelByID(store ModelAliasReader, id string) (OllamaCapabilitiesModelInfo, bool) {
+	canonical, ok := ResolveModel(store, id)
+	if !ok {
+		return OllamaCapabilitiesModelInfo{}, false
+	}
+	for _, model := range OllamaCapabilitiesModels {
+		if model.ID == canonical {
+			return model, true
+		}
+	}
+	return OllamaCapabilitiesModelInfo{}, false
+}
+
 func ClaudeModelsResponse() map[string]any {
 	resp := map[string]any{"object": "list", "data": ClaudeModels}
 	if len(ClaudeModels) > 0 {
@@ -267,6 +310,23 @@ func appendNoThinkingVariants(models []ModelInfo) []ModelInfo {
 		variant := model
 		variant.ID = withNoThinkingVariant(model.ID, true)
 		out = append(out, variant)
+	}
+	return out
+}
+func mapToOllamaModels(models []ModelInfo) []OllamaModelInfo {
+	out := make([]OllamaModelInfo, 0, len(models))
+	for _, model := range models {
+		var modifiedAt string
+		if model.Created > 0 {
+			modifiedAt = time.Unix(model.Created, 0).Format(time.RFC3339)
+		}
+		ollamaModel := OllamaModelInfo{
+			Name:       model.ID,
+			Model:      model.ID,
+			Size:       0,
+			ModifiedAt: modifiedAt,
+		}
+		out = append(out, ollamaModel)
 	}
 	return out
 }
