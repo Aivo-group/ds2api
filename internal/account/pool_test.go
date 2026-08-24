@@ -91,6 +91,29 @@ func TestPoolTargetAccountInflightLimit(t *testing.T) {
 	}
 }
 
+func TestPoolQuarantineRestoreAndRemove(t *testing.T) {
+	pool := newPoolForTest(t, "1")
+	pool.Quarantine("acc1@example.com")
+	if _, ok := pool.Acquire("acc1@example.com", nil); ok {
+		t.Fatal("quarantined target account must not be acquired")
+	}
+	acc, ok := pool.Acquire("", nil)
+	if !ok || acc.Identifier() != "acc2@example.com" {
+		t.Fatalf("expected healthy account, got ok=%v account=%q", ok, acc.Identifier())
+	}
+	pool.Release(acc.Identifier())
+	pool.Restore("acc1@example.com")
+	acc, ok = pool.Acquire("acc1@example.com", nil)
+	if !ok || acc.Identifier() != "acc1@example.com" {
+		t.Fatal("restored account must be acquirable")
+	}
+	pool.Release(acc.Identifier())
+	pool.Remove("acc1@example.com")
+	if _, ok := pool.Acquire("acc1@example.com", nil); ok {
+		t.Fatal("removed account must not be acquired")
+	}
+}
+
 func TestPoolConcurrentAcquireDistribution(t *testing.T) {
 	pool := newPoolForTest(t, "2")
 

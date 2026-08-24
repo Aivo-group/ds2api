@@ -17,6 +17,7 @@ type Pool struct {
 	recommendedConcurrency int
 	maxQueueSize           int
 	globalMaxInflight      int
+	quarantined            map[string]struct{}
 }
 
 func NewPool(store *config.Store) *Pool {
@@ -27,10 +28,49 @@ func NewPool(store *config.Store) *Pool {
 	p := &Pool{
 		store:                 store,
 		inUse:                 map[string]int{},
+		quarantined:           map[string]struct{}{},
 		maxInflightPerAccount: maxPer,
 	}
 	p.Reset()
 	return p
+}
+
+// Quarantine removes an account from new acquisitions while an explicit ban
+// signal is independently confirmed. Existing holders can release normally.
+func (p *Pool) Quarantine(accountID string) {
+	if accountID == "" {
+		return
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.quarantined[accountID] = struct{}{}
+	p.notifyWaiterLocked()
+}
+
+func (p *Pool) Restore(accountID string) {
+	if accountID == "" {
+		return
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	delete(p.quarantined, accountID)
+	p.notifyWaiterLocked()
+}
+
+func (p *Pool) Remove(accountID string) {
+	if accountID == "" {
+		return
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	for i := 0; i < len(p.queue); i++ {
+		if p.queue[i] == accountID {
+			p.queue = append(p.queue[:i], p.queue[i+1:]...)
+			break
+		}
+	}
+	p.quarantined[accountID] = struct{}{}
+	p.notifyWaiterLocked()
 }
 
 func (p *Pool) Reset() {
@@ -106,6 +146,9 @@ func (p *Pool) Status() map[string]any {
 	inUseAccounts := make([]string, 0, len(p.inUse))
 	inUseSlots := 0
 	for _, id := range p.queue {
+		if _, quarantined := p.quarantined[id]; quarantined {
+			continue
+		}
 		if p.inUse[id] < p.maxInflightPerAccount {
 			available = append(available, id)
 		}
@@ -128,5 +171,6 @@ func (p *Pool) Status() map[string]any {
 		"recommended_concurrency":  p.recommendedConcurrency,
 		"waiting":                  len(p.waiters),
 		"max_queue_size":           p.maxQueueSize,
+		"quarantined":              len(p.quarantined),
 	}
 }

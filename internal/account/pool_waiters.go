@@ -5,6 +5,9 @@ func (p *Pool) canQueueLocked(target string, exclude map[string]bool) bool {
 		if exclude[target] {
 			return false
 		}
+		if _, quarantined := p.quarantined[target]; quarantined {
+			return false
+		}
 		if _, ok := p.store.FindAccount(target); !ok {
 			return false
 		}

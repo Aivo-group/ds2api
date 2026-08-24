@@ -117,6 +117,60 @@ func TestDetermineMissingToken(t *testing.T) {
 	}
 }
 
+func TestConfirmAndRemoveBannedDeletesCredentialsAfterSecondSignal(t *testing.T) {
+	t.Setenv("DS2API_CONFIG_JSON", `{
+		"keys":["managed-key"],
+		"accounts":[
+			{"email":"banned@example.com","password":"secret","token":"banned-token"},
+			{"email":"healthy@example.com","password":"secret","token":"healthy-token"}
+		]
+	}`)
+	store := config.LoadStore()
+	pool := account.NewPool(store)
+	resolver := NewResolver(store, pool, func(_ context.Context, acc config.Account) (string, error) {
+		if acc.Email == "banned@example.com" {
+			return "", ErrAccountBanned
+		}
+		return "fresh-token", nil
+	})
+	a := &RequestAuth{
+		UseConfigToken: true,
+		AccountID:      "banned@example.com",
+		Account:        config.Account{Email: "banned@example.com", Password: "secret"},
+	}
+	if !resolver.ConfirmAndRemoveBanned(context.Background(), a) {
+		t.Fatal("expected confirmed banned account removal")
+	}
+	if _, ok := store.FindAccount("banned@example.com"); ok {
+		t.Fatal("banned credentials remain in store")
+	}
+	acc, ok := pool.Acquire("", nil)
+	if !ok || acc.Identifier() != "healthy@example.com" {
+		t.Fatalf("expected healthy fallback, got ok=%v account=%q", ok, acc.Identifier())
+	}
+}
+
+func TestConfirmAndRemoveBannedRestoresOnInconclusiveLogin(t *testing.T) {
+	resolver := newTestResolver(t)
+	resolver.Login = func(_ context.Context, _ config.Account) (string, error) {
+		return "", errors.New("temporary network failure")
+	}
+	a := &RequestAuth{
+		UseConfigToken: true,
+		AccountID:      "acc@example.com",
+		Account:        config.Account{Email: "acc@example.com", Password: "secret"},
+	}
+	if resolver.ConfirmAndRemoveBanned(context.Background(), a) {
+		t.Fatal("inconclusive confirmation must not remove account")
+	}
+	if _, ok := resolver.Store.FindAccount("acc@example.com"); !ok {
+		t.Fatal("account was removed after transient failure")
+	}
+	if _, ok := resolver.Pool.Acquire("acc@example.com", nil); !ok {
+		t.Fatal("account was not restored to pool")
+	}
+}
+
 func TestDetermineWithQueryKeyUsesDirectToken(t *testing.T) {
 	r := newTestResolver(t)
 	req, _ := http.NewRequest(http.MethodPost, "/v1beta/models/gemini-2.5-pro:generateContent?key=direct-query-key", nil)

@@ -220,6 +220,24 @@ func (s *Store) UpdateAccountToken(identifier, token string) error {
 	return s.saveLocked()
 }
 
+// RemoveAccount permanently removes a confirmed-banned managed account and
+// its persisted credentials from the configuration store.
+func (s *Store) RemoveAccount(identifier string) error {
+	identifier = strings.TrimSpace(identifier)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	idx, ok := s.findAccountIndexLocked(identifier)
+	if !ok {
+		return errors.New("account not found")
+	}
+	removed := s.cfg.Accounts[idx]
+	s.cfg.Accounts = append(s.cfg.Accounts[:idx], s.cfg.Accounts[idx+1:]...)
+	delete(s.accTest, identifier)
+	delete(s.accTest, removed.Identifier())
+	s.rebuildIndexes()
+	return s.saveLocked()
+}
+
 func (s *Store) Replace(cfg Config) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()

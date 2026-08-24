@@ -25,3 +25,12 @@ func TestShouldAttemptRefreshFalseOnGenericServerError(t *testing.T) {
 		t.Fatal("did not expect refresh on generic server error")
 	}
 }
+
+func TestIsAccountBannedUsesOnlyExplicitCodes(t *testing.T) {
+	if !isAccountBanned(40012, 0) || !isAccountBanned(0, 10) {
+		t.Fatal("explicit DeepSeek ban codes were not recognized")
+	}
+	if isAccountBanned(401, 0) || isAccountBanned(502, 0) {
+		t.Fatal("ordinary HTTP failures must not be classified as bans")
+	}
+}

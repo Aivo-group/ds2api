@@ -63,6 +63,9 @@ func (p *Pool) canAcquireIDLocked(accountID string) bool {
 	if accountID == "" {
 		return false
 	}
+	if _, quarantined := p.quarantined[accountID]; quarantined {
+		return false
+	}
 	if p.inUse[accountID] >= p.maxInflightPerAccount {
 		return false
 	}

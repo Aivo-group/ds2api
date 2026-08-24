@@ -34,11 +34,18 @@ func (c *Client) Login(ctx context.Context, acc config.Account) (string, error) 
 		return "", err
 	}
 	code := intFrom(resp["code"])
+	if code == 40012 {
+		return "", fmt.Errorf("%w: code=%d", auth.ErrAccountBanned, code)
+	}
 	if code != 0 {
 		return "", fmt.Errorf("login failed: %v", resp["msg"])
 	}
 	data, _ := resp["data"].(map[string]any)
-	if intFrom(data["biz_code"]) != 0 {
+	bizCode := intFrom(data["biz_code"])
+	if bizCode == 10 {
+		return "", fmt.Errorf("%w: biz_code=%d", auth.ErrAccountBanned, bizCode)
+	}
+	if bizCode != 0 {
 		return "", fmt.Errorf("login failed: %v", data["biz_msg"])
 	}
 	bizData, _ := data["biz_data"].(map[string]any)
@@ -66,6 +73,15 @@ func (c *Client) CreateSession(ctx context.Context, a *auth.RequestAuth, maxAtte
 			continue
 		}
 		code, bizCode, msg, bizMsg := extractResponseStatus(resp)
+		if isAccountBanned(code, bizCode) && a.UseConfigToken {
+			c.Auth.ConfirmAndRemoveBanned(ctx, a)
+			if c.Auth.SwitchAccount(ctx, a) {
+				refreshed = false
+				attempts++
+				continue
+			}
+			return "", &RequestFailure{Op: "create session", Kind: FailureManagedUnauthorized, Message: "managed account was banned"}
+		}
 		if status == http.StatusOK && code == 0 && bizCode == 0 {
 			sessionID := extractCreateSessionID(resp)
 			if sessionID != "" {
@@ -119,6 +135,15 @@ func (c *Client) GetPowForTarget(ctx context.Context, a *auth.RequestAuth, targe
 			continue
 		}
 		code, bizCode, msg, bizMsg := extractResponseStatus(resp)
+		if isAccountBanned(code, bizCode) && a.UseConfigToken {
+			c.Auth.ConfirmAndRemoveBanned(ctx, a)
+			if c.Auth.SwitchAccount(ctx, a) {
+				refreshed = false
+				attempts++
+				continue
+			}
+			return "", &RequestFailure{Op: "get pow", Kind: FailureManagedUnauthorized, Message: "managed account was banned"}
+		}
 		if status == http.StatusOK && code == 0 && bizCode == 0 {
 			data, _ := resp["data"].(map[string]any)
 			bizData, _ := data["biz_data"].(map[string]any)
@@ -181,6 +206,10 @@ func isTokenInvalid(status int, code int, bizCode int, msg string, bizMsg string
 		strings.Contains(msg, "not login") ||
 		strings.Contains(msg, "login required") ||
 		strings.Contains(msg, "invalid jwt")
+}
+
+func isAccountBanned(code, bizCode int) bool {
+	return code == 40012 || bizCode == 10
 }
 
 func shouldAttemptRefresh(status int, code int, bizCode int, msg string, bizMsg string) bool {

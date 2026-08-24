@@ -19,8 +19,9 @@ type ctxKey string
 const authCtxKey ctxKey = "auth_context"
 
 var (
-	ErrUnauthorized = errors.New("unauthorized: missing auth token")
-	ErrNoAccount    = errors.New("no accounts configured or all accounts are busy")
+	ErrUnauthorized  = errors.New("unauthorized: missing auth token")
+	ErrNoAccount     = errors.New("no accounts configured or all accounts are busy")
+	ErrAccountBanned = errors.New("managed DeepSeek account is banned")
 )
 
 type RequestAuth struct {
@@ -108,6 +109,9 @@ func (r *Resolver) acquireManagedRequestAuth(ctx context.Context, callerID, targ
 
 		if err := r.ensureManagedToken(ctx, a); err != nil {
 			lastEnsureErr = err
+			if errors.Is(err, ErrAccountBanned) {
+				r.ConfirmAndRemoveBanned(ctx, a)
+			}
 			tried[a.AccountID] = true
 			r.Pool.Release(a.AccountID)
 			if target != "" {
@@ -117,6 +121,32 @@ func (r *Resolver) acquireManagedRequestAuth(ctx context.Context, callerID, targ
 		}
 		return a, nil
 	}
+}
+
+// ConfirmAndRemoveBanned requires a second explicit banned response from a
+// fresh login before permanently deleting account credentials. This prevents
+// transient 401/403/5xx failures from becoming destructive cleanup events.
+func (r *Resolver) ConfirmAndRemoveBanned(ctx context.Context, a *RequestAuth) bool {
+	if r == nil || a == nil || !a.UseConfigToken || a.AccountID == "" {
+		return false
+	}
+	accountID := a.AccountID
+	r.Pool.Quarantine(accountID)
+	_, err := r.Login(ctx, a.Account)
+	if !errors.Is(err, ErrAccountBanned) {
+		r.Pool.Restore(accountID)
+		config.Logger.Warn("[banned_account] confirmation failed; account restored", "account", accountID, "error", err)
+		return false
+	}
+	removeErr := r.Store.RemoveAccount(accountID)
+	r.Pool.Remove(accountID)
+	r.clearTokenRefreshMark(accountID)
+	if removeErr != nil && !strings.Contains(removeErr.Error(), "not found") {
+		config.Logger.Error("[banned_account] removed from pool but persistence failed", "account", accountID, "error", removeErr)
+		return true
+	}
+	config.Logger.Warn("[banned_account] confirmed and removed", "account", accountID)
+	return true
 }
 
 // DetermineCaller resolves caller identity without acquiring any pooled account.
@@ -205,6 +235,9 @@ func (r *Resolver) SwitchAccount(ctx context.Context, a *RequestAuth) bool {
 		a.Account = acc
 		a.AccountID = acc.Identifier()
 		if err := r.ensureManagedToken(ctx, a); err != nil {
+			if errors.Is(err, ErrAccountBanned) {
+				r.ConfirmAndRemoveBanned(ctx, a)
+			}
 			a.TriedAccounts[a.AccountID] = true
 			r.Pool.Release(a.AccountID)
 			continue
