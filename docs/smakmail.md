@@ -34,6 +34,38 @@ The provider's final order response remains the authoritative charged price.
 Do not assume that the price returned by the product catalog is the final
 charge; inspect the order summary and account balance.
 
+## DeepSeek enrollment handoff
+
+`deepseek-enroll` connects mailbox provisioning, verification-code polling,
+the current DeepSeek registration contract, and the DS2API Admin API. Sensitive
+session state is written only to a newly-created `0600` file.
+
+The prepare command stops with `manual_action_required`. Open the official
+signup page, use the mailbox and generated account password from the protected
+state file, and request the email code after completing any human verification.
+Then run resume; it waits for the code, completes registration, and imports the
+account into the live DS2API pool.
+
+```bash
+export SMAKMAIL_API_TOKEN='read-from-your-secret-store'
+go run ./cmd/deepseek-enroll prepare \
+  --max-price-kopeks 100 \
+  --proxy-id proxy-id-from-ds2api \
+  --out /secure/path/deepseek-enrollment.json
+
+export DS2API_BASE_URL='http://127.0.0.1:6011'
+export DS2API_ADMIN_KEY='read-from-your-secret-store'
+go run ./cmd/deepseek-enroll resume \
+  --state /secure/path/deepseek-enrollment.json \
+  --wait 5m
+```
+
+`CamoufoxPlaceholder` reserves a browser-adapter boundary but is intentionally
+disabled: it does not install or launch Camoufox, rotate fingerprints, or solve
+Turnstile. Its only result is the explicit operator handoff above. This keeps
+the rest of enrollment independently testable without embedding an anti-detect
+browser into the production service.
+
 ## Banned-account cleanup
 
 Managed DeepSeek accounts are removed only for explicit upstream ban codes
