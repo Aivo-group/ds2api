@@ -114,6 +114,38 @@ func TestPoolQuarantineRestoreAndRemove(t *testing.T) {
 	}
 }
 
+func TestPoolCooldownTemporarilyRemovesAccountAndRestoresIt(t *testing.T) {
+	pool := newPoolForTest(t, "1")
+	until := pool.Cooldown("acc1@example.com", 50*time.Millisecond)
+	if until.IsZero() {
+		t.Fatal("expected cooldown deadline")
+	}
+	if _, ok := pool.Acquire("acc1@example.com", nil); ok {
+		t.Fatal("cooling-down account must not be acquired")
+	}
+	status := pool.Status()
+	if status["healthy"] != 1 || status["cooldown"] != 1 {
+		t.Fatalf("unexpected lifecycle status during cooldown: %#v", status)
+	}
+	if deadlines, ok := status["cooldown_until"].(map[string]string); !ok || deadlines["acc1@example.com"] == "" {
+		t.Fatalf("cooldown deadline missing from status: %#v", status)
+	}
+
+	deadline := time.Now().Add(time.Second)
+	for time.Now().Before(deadline) {
+		if acc, ok := pool.Acquire("acc1@example.com", nil); ok {
+			pool.Release(acc.Identifier())
+			status = pool.Status()
+			if status["healthy"] != 2 || status["cooldown"] != 0 {
+				t.Fatalf("unexpected lifecycle status after cooldown: %#v", status)
+			}
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatal("account was not restored after cooldown")
+}
+
 func TestPoolConcurrentAcquireDistribution(t *testing.T) {
 	pool := newPoolForTest(t, "2")
 

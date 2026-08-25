@@ -139,7 +139,7 @@ func (r *Resolver) ConfirmAndRemoveBanned(ctx context.Context, a *RequestAuth) b
 		return false
 	}
 	removeErr := r.Store.RemoveAccount(accountID)
-	r.Pool.Remove(accountID)
+	r.Pool.RemoveBanned(accountID)
 	r.clearTokenRefreshMark(accountID)
 	if removeErr != nil && !strings.Contains(removeErr.Error(), "not found") {
 		config.Logger.Error("[banned_account] removed from pool but persistence failed", "account", accountID, "error", removeErr)

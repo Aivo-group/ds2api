@@ -204,7 +204,7 @@ flowchart LR
 - `internal/chathistory`: server-side conversation history persistence, pagination, detail lookup, and retention policy.
 - `internal/responsehistory`: DeepSeek upstream response archive, saving assistant text, thinking, raw tool-call fragments, and streaming detail before protocol rendering/trimming.
 - `internal/config`: config loading/validation + runtime settings hot-reload.
-- `internal/account`: managed account pool, inflight slots, waiting queue.
+- `internal/account`: managed account pool, inflight slots, waiting queue, temporary upstream-rate-limit cooldowns, and lifecycle statistics exported through `/metrics`.
 - `internal/textclean`: text cleanup helpers, e.g. stripping `[reference: N]` markers.
 - `internal/claudeconv`: Claude API request to DeepSeek format conversion.
 - `internal/compat`: compatibility regression tests using SSE fixtures to verify output consistency.

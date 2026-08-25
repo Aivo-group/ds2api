@@ -144,6 +144,9 @@ func TestConfirmAndRemoveBannedDeletesCredentialsAfterSecondSignal(t *testing.T)
 	if _, ok := store.FindAccount("banned@example.com"); ok {
 		t.Fatal("banned credentials remain in store")
 	}
+	if got := pool.Stats().BannedRemovalsTotal; got != 1 {
+		t.Fatalf("expected one banned removal metric, got %d", got)
+	}
 	acc, ok := pool.Acquire("", nil)
 	if !ok || acc.Identifier() != "healthy@example.com" {
 		t.Fatalf("expected healthy fallback, got ok=%v account=%q", ok, acc.Identifier())

@@ -73,6 +73,9 @@ func (c *Client) CreateSession(ctx context.Context, a *auth.RequestAuth, maxAtte
 			continue
 		}
 		code, bizCode, msg, bizMsg := extractResponseStatus(resp)
+		if status == http.StatusTooManyRequests && a.UseConfigToken {
+			a.MarkRateLimited(auth.RateLimitDelay("", resp))
+		}
 		if isAccountBanned(code, bizCode) && a.UseConfigToken {
 			c.Auth.ConfirmAndRemoveBanned(ctx, a)
 			if c.Auth.SwitchAccount(ctx, a) {
@@ -135,6 +138,9 @@ func (c *Client) GetPowForTarget(ctx context.Context, a *auth.RequestAuth, targe
 			continue
 		}
 		code, bizCode, msg, bizMsg := extractResponseStatus(resp)
+		if status == http.StatusTooManyRequests && a.UseConfigToken {
+			a.MarkRateLimited(auth.RateLimitDelay("", resp))
+		}
 		if isAccountBanned(code, bizCode) && a.UseConfigToken {
 			c.Auth.ConfirmAndRemoveBanned(ctx, a)
 			if c.Auth.SwitchAccount(ctx, a) {

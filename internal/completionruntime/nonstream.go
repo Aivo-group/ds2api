@@ -196,6 +196,9 @@ func canRetryOnAlternateAccount(ctx context.Context, a *auth.RequestAuth, outErr
 	if outErr == nil || outErr.Status != http.StatusTooManyRequests {
 		return false
 	}
+	if a != nil {
+		a.MarkRateLimited(outErr.RetryAfter)
+	}
 	if !retryEnabled || attempted == nil || *attempted {
 		return false
 	}
@@ -252,7 +255,11 @@ func collectAttempt(resp *http.Response, stdReq promptcompat.StandardRequest, us
 		if message == "" {
 			message = http.StatusText(resp.StatusCode)
 		}
-		return assistantturn.Turn{}, &assistantturn.OutputError{Status: resp.StatusCode, Message: message, Code: "error"}
+		outErr := &assistantturn.OutputError{Status: resp.StatusCode, Message: message, Code: "error"}
+		if resp.StatusCode == http.StatusTooManyRequests {
+			outErr.RetryAfter = auth.RateLimitDelay(resp.Header.Get("Retry-After"), body)
+		}
+		return assistantturn.Turn{}, outErr
 	}
 	result := sse.CollectStream(resp, stdReq.Thinking, false)
 	return assistantturn.BuildTurnFromCollected(result, buildOptions(stdReq, usagePrompt, opts)), nil

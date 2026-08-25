@@ -111,7 +111,8 @@ func TestExecuteNonStreamWithRetrySwitchesManagedAccountBeforeFinal429(t *testin
 		]
 	}`)
 	store := config.LoadStore()
-	resolver := auth.NewResolver(store, account.NewPool(store), func(_ context.Context, acc config.Account) (string, error) {
+	pool := account.NewPool(store)
+	resolver := auth.NewResolver(store, pool, func(_ context.Context, acc config.Account) (string, error) {
 		return "token-" + acc.Identifier(), nil
 	})
 	req, _ := http.NewRequest(http.MethodPost, "/", nil)
@@ -147,6 +148,10 @@ func TestExecuteNonStreamWithRetrySwitchesManagedAccountBeforeFinal429(t *testin
 	}
 	if result.SessionID != "session-acc2@test.com" {
 		t.Fatalf("expected switched account session, got %q", result.SessionID)
+	}
+	status := pool.Status()
+	if status["cooldown"] != 1 || status["healthy"] != 1 {
+		t.Fatalf("rate-limited account was not removed temporarily: %#v", status)
 	}
 	wantAccounts := []string{"acc1@test.com", "acc1@test.com", "acc2@test.com"}
 	if len(ds.completionAccounts) != len(wantAccounts) {

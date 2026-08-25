@@ -96,6 +96,7 @@ func NewApp() (*App, error) {
 	r.Head("/healthz", healthzHandler)
 	r.Get("/readyz", readyzHandler)
 	r.Head("/readyz", readyzHandler)
+	r.Get("/metrics", accountMetricsHandler(pool))
 	r.Get("/v1/models", modelsHandler.ListModels)
 	r.Get("/v1/models/{model_id}", modelsHandler.GetModel)
 	r.Post("/v1/chat/completions", chatHandler.ChatCompletions)

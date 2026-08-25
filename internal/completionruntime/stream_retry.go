@@ -58,6 +58,9 @@ func ExecuteStreamWithRetry(ctx context.Context, ds DeepSeekCaller, a *auth.Requ
 	currentResp := initialResp
 	currentPayload := clonePayload(payload)
 	for {
+		if currentResp != nil && currentResp.StatusCode == http.StatusTooManyRequests && a != nil {
+			a.MarkRateLimited(auth.RateLimitDelay(currentResp.Header.Get("Retry-After"), nil))
+		}
 		allowAccountSwitch := opts.RetryEnabled && attempts >= retryMax && !accountSwitchAttempted && a != nil && a.UseConfigToken
 		terminalWritten, retryable := hooks.ConsumeAttempt(currentResp, opts.RetryEnabled && (attempts < retryMax || allowAccountSwitch))
 		if terminalWritten {
@@ -127,6 +130,9 @@ func ExecuteStreamWithRetry(ctx context.Context, ds DeepSeekCaller, a *auth.Requ
 				config.Logger.Warn("[completion_runtime_empty_retry] retry error body read failed", "surface", surface, "stream", opts.Stream, "retry_attempt", attempts, "error", readErr)
 			}
 			closeRetryBody(surface, nextResp.Body)
+			if nextResp.StatusCode == http.StatusTooManyRequests && a != nil {
+				a.MarkRateLimited(auth.RateLimitDelay(nextResp.Header.Get("Retry-After"), body))
+			}
 			msg := strings.TrimSpace(string(body))
 			if msg == "" {
 				msg = http.StatusText(nextResp.StatusCode)

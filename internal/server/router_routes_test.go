@@ -30,6 +30,7 @@ func TestAPIRoutesRemainRegistered(t *testing.T) {
 	}
 
 	for _, want := range []string{
+		"GET /metrics",
 		"GET /v1/models",
 		"GET /v1/models/{model_id}",
 		"POST /v1/chat/completions",

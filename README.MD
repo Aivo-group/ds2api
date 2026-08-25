@@ -366,7 +366,10 @@ Gemini 路由还可以使用 `x-goog-api-key`，或在没有认证头时使用 `
 - 当 in-flight 槽位满时，请求进入等待队列，**不会立即 429**
 - 超出总承载上限后才返回 `429 Too Many Requests`，当前响应不附带 `Retry-After`
 - completion 空输出类 429 会先做同账号补偿重试；托管账号模式还会在最终返回 429 前切到另一个可用账号 fresh retry 一次
-- `GET /admin/queue/status` 返回实时并发状态
+- 上游返回 `429` 时，当前托管账号会临时退出调度池；优先采用 `Retry-After` 或响应 JSON 中的 retry/timeout 值，缺失时冷却 60 秒，之后自动恢复
+- 明确封禁码仍需通过一次全新登录再次确认；确认封禁后才会永久移除账号，瞬时 401/403/5xx 不会触发删除
+- `GET /admin/queue/status` 返回实时并发与账号生命周期状态（`healthy`、`cooldown`、`quarantined`）
+- `GET /metrics` 以 Prometheus 文本格式暴露存活账号数、冷却账号数、等待请求数、429 事件数和已确认封禁移除数
 
 ## Tool Call 适配
 

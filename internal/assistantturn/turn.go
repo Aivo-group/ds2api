@@ -3,6 +3,7 @@ package assistantturn
 import (
 	"net/http"
 	"strings"
+	"time"
 
 	"ds2api/internal/httpapi/openai/shared"
 	"ds2api/internal/promptcompat"
@@ -28,9 +29,10 @@ type Usage struct {
 }
 
 type OutputError struct {
-	Status  int
-	Message string
-	Code    string
+	Status     int
+	Message    string
+	Code       string
+	RetryAfter time.Duration
 }
 
 type Turn struct {
